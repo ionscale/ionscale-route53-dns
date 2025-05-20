@@ -1,0 +1,80 @@
+project_name: ionscale-route53-dns
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - env: [ CGO_ENABLED=0 ]
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+
+checksum:
+  name_template: "checksums.txt"
+
+dockers:
+  - image_templates: [ "ghcr.io/ionscale/{{ .ProjectName }}:{{ .Version }}-amd64" ]
+    dockerfile: Dockerfile
+    use: buildx
+    build_flag_templates:
+      - --platform=linux/amd64
+  - image_templates: [ "ghcr.io/ionscale/{{ .ProjectName }}:{{ .Version }}-arm64" ]
+    goarch: arm64
+    dockerfile: Dockerfile
+    use: buildx
+    build_flag_templates:
+      - --platform=linux/arm64
+
+docker_manifests:
+  - name_template: ghcr.io/ionscale/{{ .ProjectName }}:{{ .Version }}
+    image_templates:
+      - ghcr.io/ionscale/{{ .ProjectName }}:{{ .Version }}-amd64
+      - ghcr.io/ionscale/{{ .ProjectName }}:{{ .Version }}-arm64
+  - name_template: ghcr.io/ionscale/{{ .ProjectName }}:latest
+    image_templates:
+      - ghcr.io/ionscale/{{ .ProjectName }}:{{ .Version }}-amd64
+      - ghcr.io/ionscale/{{ .ProjectName }}:{{ .Version }}-arm64
+
+signs:
+  - cmd: cosign
+    env:
+      - COSIGN_EXPERIMENTAL=1
+    certificate: '${artifact}.pem'
+    args:
+      - sign-blob
+      - '--output-certificate=${certificate}'
+      - '--output-signature=${signature}'
+      - '${artifact}'
+      - '--yes'
+    artifacts: checksum
+
+docker_signs:
+  - cmd: cosign
+    env:
+      - COSIGN_EXPERIMENTAL=1
+    artifacts: all
+    output: true
+    args:
+      - sign
+      - '${artifact}'
+      - '--yes'
+
+archives:
+  - format: binary
+    name_template: '{{ .Binary }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}'
+
+release:
+  prerelease: auto
+
+changelog:
+  disable: true
